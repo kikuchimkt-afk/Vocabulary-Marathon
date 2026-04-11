@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Sunshine 英単語クイズ</title>
+  <meta name="description" content="開隆堂サンシャイン中学英語 4択クイズ - Tier別・セクション別対応">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app" id="app">
+
+    <!-- ===== Setup Screen ===== -->
+    <div class="setup-screen" id="setupScreen">
+      <div class="header">
+        <h1>☀️ Sunshine 英単語クイズ</h1>
+        <p>開隆堂サンシャイン中学英語 · 4択空所補充</p>
+      </div>
+
+      <!-- Grade Selection -->
+      <div class="setup-card">
+        <h2>📚 学年を選択</h2>
+        <div class="grade-btns" id="gradeBtns"></div>
+
+        <h2>🏷️ Tier フィルター</h2>
+        <div class="tier-btns" id="tierBtns"></div>
+
+        <h2>⚙️ 出題設定</h2>
+        <div class="config-row">
+          <div class="config-item">
+            <label>📦 問題数</label>
+            <select id="questionCount">
+              <option value="10">10問</option>
+              <option value="20" selected>20問</option>
+              <option value="30">30問</option>
+              <option value="50">50問</option>
+              <option value="0">全問</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label>🔀 出題順</label>
+            <select id="questionOrder">
+              <option value="random" selected>ランダム</option>
+              <option value="sequential">順番通り</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="config-row">
+          <div class="config-item">
+            <label>📖 タイプ</label>
+            <select id="questionType">
+              <option value="all" selected>すべて</option>
+              <option value="word">単語のみ</option>
+              <option value="idiom">イディオムのみ</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label>📄 セクション</label>
+            <select id="sectionFilter">
+              <option value="all" selected>すべて</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="summary-badge" id="summaryBadge">
+          <div class="stat">📝 対象: <strong id="matchCount">0</strong>問</div>
+          <div class="stat">🎯 出題: <strong id="pickCount">0</strong>問</div>
+        </div>
+
+        <button class="start-btn" id="startBtn" disabled>🚀 クイズ開始</button>
+      </div>
+    </div>
+
+    <!-- ===== Quiz Screen ===== -->
+    <div class="quiz-screen" id="quizScreen">
+      <div class="score-bar" id="scoreBar">
+        <span>⭕ <span class="correct-count" id="correctCount">0</span></span>
+        <span class="accuracy" id="accuracy">0%</span>
+        <span>❌ <span class="wrong-count" id="wrongCount">0</span></span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="question-header" id="questionHeader"></div>
+      <div class="sentence-card" id="sentenceCard"></div>
+      <div class="choices" id="choices"></div>
+      <button class="next-btn" id="nextBtn">次の問題 →</button>
+    </div>
+
+    <!-- ===== Result Screen ===== -->
+    <div class="result-screen" id="resultScreen"></div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
