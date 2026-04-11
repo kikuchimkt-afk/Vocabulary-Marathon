@@ -20,6 +20,7 @@ const state = {
   mistakes: [],       // { question, yourAnswer }
   answered: false,
   hintStage: 0,       // 0: no hint, 1: sentence JP shown, 2: choice JP shown
+  todayAnswered: 0,   // 今日の解答数
 };
 
 // ====== DOM Helpers ======
@@ -27,9 +28,84 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 const on = (el, ev, fn) => { if (el) el.addEventListener(ev, fn); };
 
+// ====== Unlock System ======
+const UNLOCK_KEY = 'sunshine_quiz_unlocked';
+const UNLOCK_PASSWORD = '55448833';
+const FREE_SECTIONS = ['1']; // ロック時に使えるセクション
+
+function isUnlocked() {
+  try { return localStorage.getItem(UNLOCK_KEY) === 'true'; } catch(e) { return false; }
+}
+
+function setUnlocked(val) {
+  try { localStorage.setItem(UNLOCK_KEY, val ? 'true' : 'false'); } catch(e) {}
+}
+
+function isSectionFree(section) {
+  return FREE_SECTIONS.includes(section);
+}
+
 // ====== Streak (連続トレーニング) ======
 const STREAK_KEY = 'sunshine_quiz_streak';
 const MILESTONES = [20, 40, 60, 80, 100, 150, 200, 365];
+const MIN_ANSWERS_FOR_STREAK = 10; // 1日最低10問解答で連続記録
+
+// ====== Mistake History (永続保存) ======
+const MISTAKES_KEY = 'sunshine_quiz_mistakes';
+
+function getMistakeHistory() {
+  try {
+    const raw = localStorage.getItem(MISTAKES_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return []; // [{ id, grade, section, sentence, answer, answer_translation, date }]
+}
+
+function saveMistakeHistory(arr) {
+  try {
+    // 最大500件に制限
+    const trimmed = arr.slice(-500);
+    localStorage.setItem(MISTAKES_KEY, JSON.stringify(trimmed));
+  } catch(e) {}
+}
+
+function addMistakeToHistory(q, grade) {
+  const history = getMistakeHistory();
+  // 同じIDが既にあればスキップ（重複回避）
+  if (history.some(h => h.id === q.id)) return;
+  history.push({
+    id: q.id,
+    grade: grade,
+    section: q.section || '',
+    sentence: q.sentence,
+    sentence_ja: q.sentence_ja || '',
+    answer: q.answer,
+    answer_translation: q.answer_translation || '',
+    choices: q.choices,
+    type: q.type || 'word',
+    tier: q.tier || 1,
+    page: q.page || '',
+    audioHash: q.audioHash || null,
+    date: getTodayStr(),
+  });
+  saveMistakeHistory(history);
+}
+
+function removeMistakeFromHistory(id) {
+  const history = getMistakeHistory();
+  saveMistakeHistory(history.filter(h => h.id !== id));
+}
+
+function getMistakeSummary() {
+  const history = getMistakeHistory();
+  const summary = {}; // { g1: { section: count, ... }, g2: ... }
+  history.forEach(h => {
+    if (!summary[h.grade]) summary[h.grade] = {};
+    const sec = h.section || 'other';
+    summary[h.grade][sec] = (summary[h.grade][sec] || 0) + 1;
+  });
+  return { total: history.length, byGrade: summary };
+}
 
 function getStreakData() {
   try {
@@ -75,6 +151,9 @@ function recordTraining() {
   
   if (data.lastDate === today) return data; // already counted
   
+  // 今日の累計解答数が10問未満なら記録しない
+  if (state.todayAnswered < MIN_ANSWERS_FOR_STREAK) return data;
+  
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
@@ -90,6 +169,17 @@ function recordTraining() {
   
   saveStreakData(data);
   return data;
+}
+
+// 解答するたびにカウンタを増やし、10問到達時にストリーク記録
+function trackAnswer() {
+  state.todayAnswered++;
+  if (state.todayAnswered === MIN_ANSWERS_FOR_STREAK) {
+    const sd = recordTraining();
+    renderStreakBadge();
+    return sd;
+  }
+  return null;
 }
 
 function renderStreakBadge() {
@@ -159,7 +249,7 @@ function showCelebrationModal(milestone, streak) {
         <strong>✨ 素敵なプレゼント ✨</strong>がもらえるよ！
       </div>
       <div class="celebration-date">${new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-      <div class="celebration-name">☀️ Sunshine 英単語クイズ</div>
+      <div class="celebration-name">🏃 Vocabulary Marathon</div>
       <button class="celebration-close" onclick="closeCelebration()">閉じる</button>
     </div>`;
   
@@ -295,6 +385,12 @@ function initSetup() {
   // Start button
   on($('#startBtn'), 'click', startQuiz);
   on($('#nextBtn'), 'click', nextQuestion);
+
+  // ミス復習ボタン更新
+  updateMistakeBtn();
+
+  // アンロックバッジ更新
+  renderUnlockBadge();
 }
 
 function renderSectionChips() {
@@ -310,36 +406,51 @@ function renderSectionChips() {
   const sectionSet = [...new Set(data.map(q => q.section).filter(Boolean))].sort(sortSectionsByPage(data));
 
   // 「全て」チップ
+  const unlocked = isUnlocked();
   const allActive = state.selectedSections.length === 0;
   const allChip = document.createElement('button');
-  allChip.className = 'section-chip' + (allActive ? ' active all' : '');
-  allChip.textContent = '全て';
-  allChip.addEventListener('click', () => {
-    state.selectedSections = [];
-    renderSectionChips();
-    updatePageRange();
-    updateSummary();
-  });
+  if (!unlocked) {
+    // ロック時は「全て」は使えない
+    allChip.className = 'section-chip locked';
+    allChip.textContent = '🔒 全て';
+    allChip.addEventListener('click', () => showUnlockModal());
+  } else {
+    allChip.className = 'section-chip' + (allActive ? ' active all' : '');
+    allChip.textContent = '全て';
+    allChip.addEventListener('click', () => {
+      state.selectedSections = [];
+      renderSectionChips();
+      updatePageRange();
+      updateSummary();
+    });
+  }
   container.appendChild(allChip);
 
   // 各セクションチップ
   sectionSet.forEach(s => {
     const count = data.filter(q => q.section === s).length;
     const isActive = state.selectedSections.includes(s);
+    const locked = !unlocked && !isSectionFree(s);
     const chip = document.createElement('button');
-    chip.className = 'section-chip' + (isActive ? ' active' : '');
+    chip.className = 'section-chip' + (isActive ? ' active' : '') + (locked ? ' locked' : '');
     chip.dataset.section = s;
-    chip.innerHTML = `${sectionLabel(s)} <span class="chip-count">${count}</span>`;
-    chip.addEventListener('click', () => {
-      if (isActive) {
-        state.selectedSections = state.selectedSections.filter(x => x !== s);
-      } else {
-        state.selectedSections.push(s);
-      }
-      renderSectionChips();
-      updatePageRange();
-      updateSummary();
-    });
+    chip.innerHTML = `${locked ? '🔒 ' : ''}${sectionLabel(s)} <span class="chip-count">${count}</span>`;
+    if (locked) {
+      chip.addEventListener('click', () => {
+        showUnlockModal();
+      });
+    } else {
+      chip.addEventListener('click', () => {
+        if (isActive) {
+          state.selectedSections = state.selectedSections.filter(x => x !== s);
+        } else {
+          state.selectedSections.push(s);
+        }
+        renderSectionChips();
+        updatePageRange();
+        updateSummary();
+      });
+    }
     container.appendChild(chip);
   });
 }
@@ -579,13 +690,20 @@ function handleAnswer(idx) {
 
   if (isCorrect) {
     state.correct++;
+    // 正解した場合、ミス履歴から削除
+    removeMistakeFromHistory(q.id);
   } else {
     state.wrong++;
     state.mistakes.push({
       question: q,
       yourAnswer: selected.word,
     });
+    // ミス履歴に永続保存
+    addMistakeToHistory(q, state.grade);
   }
+  
+  // 解答数トラッキング
+  trackAnswer();
 
   // Visual feedback
   const btns = $$('.choice-btn');
@@ -685,7 +803,7 @@ function nextQuestion() {
 function showResult() {
   showScreen('result');
 
-  // ストリーク記録
+  // ストリーク記録（10問以上解答済みなら）
   const streakData = recordTraining();
 
   const total = state.questions.length;
@@ -733,7 +851,7 @@ function showResult() {
 
   $('#resultScreen').innerHTML = `
     <div class="header">
-      <h1>☀️ Sunshine 英単語クイズ</h1>
+      <h1>🏃 Vocabulary Marathon</h1>
       <p>${gradeLabel} · ${tierLabel}</p>
     </div>
     <div class="result-card slide-up">
@@ -802,6 +920,7 @@ function retryMistakes() {
 
 function goHome() {
   showScreen('setup');
+  updateMistakeBtn();
 }
 
 // ====== Help Manual ======
@@ -859,7 +978,7 @@ function showHelp() {
 
         <div class="help-section">
           <h3>🔥 連続トレーニング</h3>
-          <p>毎日クイズを完了すると連続日数がカウントされます。</p>
+          <p>毎日<strong>10問以上</strong>解答すると連続日数がカウントされます。</p>
           <ul>
             <li><strong>20日・40日・60日...</strong> 達成でお祝い画面が出ます！</li>
             <li>📸 スクリーンショットを保存して先生に見せると<strong>プレゼント</strong>がもらえます！</li>
@@ -881,6 +1000,333 @@ function closeHelp() {
   }
 }
 
+// ====== Mistake Review Modal ======
+function showMistakeReviewModal() {
+  const history = getMistakeHistory();
+  if (history.length === 0) {
+    alert('ミスした問題はまだありません。\nクイズを始めましょう！');
+    return;
+  }
+
+  const summary = getMistakeSummary();
+  const gradeLabels = { g1: '📗 中学1年', g2: '📘 中学2年', g3: '📙 中学3年' };
+
+  let categoriesHtml = '';
+  for (const [grade, sections] of Object.entries(summary.byGrade)) {
+    const gradeTotal = Object.values(sections).reduce((s, v) => s + v, 0);
+    categoriesHtml += `
+      <div class="mr-grade">
+        <label class="mr-grade-label">
+          <input type="checkbox" class="mr-grade-cb" data-grade="${grade}" checked>
+          ${gradeLabels[grade] || grade} <span class="mr-count">${gradeTotal}問</span>
+        </label>
+        <div class="mr-sections" data-grade="${grade}">`;
+    
+    // セクションをページ順でソート
+    const sortedSections = Object.entries(sections).sort((a, b) => {
+      const pa = history.find(h => h.grade === grade && h.section === a[0]);
+      const pb = history.find(h => h.grade === grade && h.section === b[0]);
+      const na = pa ? (pa.page.match(/p\.(\d+)/) || [0,999])[1] : 999;
+      const nb = pb ? (pb.page.match(/p\.(\d+)/) || [0,999])[1] : 999;
+      return parseInt(na) - parseInt(nb);
+    });
+
+    for (const [sec, count] of sortedSections) {
+      categoriesHtml += `
+        <label class="mr-section-label">
+          <input type="checkbox" class="mr-section-cb" data-grade="${grade}" data-section="${sec}" checked>
+          ${sectionLabel(sec)} <span class="mr-count">${count}</span>
+        </label>`;
+    }
+    categoriesHtml += '</div></div>';
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'help-overlay';
+  overlay.id = 'mistakeReviewModal';
+  overlay.innerHTML = `
+    <div class="help-modal slide-up">
+      <div class="help-header">
+        <h2>📝 ミスした問題を復習</h2>
+        <button class="help-close-x" onclick="closeMistakeReview()">×</button>
+      </div>
+      <div class="help-body">
+        <div class="mr-total">累計 <strong>${history.length}</strong> 問のミス履歴</div>
+        <p class="mr-desc">復習したい範囲を選んでください：</p>
+        ${categoriesHtml}
+      </div>
+      <div class="mr-actions">
+        <button class="help-close-btn" style="background:var(--success);" onclick="startMistakeReviewFromModal()">🚀 復習スタート</button>
+        <button class="mr-clear-btn" onclick="if(confirm('ミス履歴を全て削除しますか？')){localStorage.removeItem('${MISTAKES_KEY}');closeMistakeReview();updateMistakeBtn();}">🗑️ 履歴をクリア</button>
+      </div>
+    </div>`;
+  
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  // 学年チェックボックスの連動
+  overlay.querySelectorAll('.mr-grade-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const grade = cb.dataset.grade;
+      const checked = cb.checked;
+      overlay.querySelectorAll(`.mr-section-cb[data-grade="${grade}"]`).forEach(s => s.checked = checked);
+    });
+  });
+}
+
+function closeMistakeReview() {
+  const modal = $('#mistakeReviewModal');
+  if (modal) {
+    modal.classList.remove('show');
+    setTimeout(() => modal.remove(), 300);
+  }
+}
+
+function startMistakeReviewFromModal() {
+  const modal = $('#mistakeReviewModal');
+  if (!modal) return;
+
+  // 選択されたセクションを収集
+  const selected = new Set();
+  modal.querySelectorAll('.mr-section-cb:checked').forEach(cb => {
+    selected.add(`${cb.dataset.grade}:${cb.dataset.section}`);
+  });
+
+  const history = getMistakeHistory();
+  const filtered = history.filter(h => selected.has(`${h.grade}:${h.section}`));
+
+  if (filtered.length === 0) {
+    alert('選択された範囲にミス問題がありません。');
+    return;
+  }
+
+  closeMistakeReview();
+
+  // シャッフル
+  const questions = [...filtered];
+  for (let i = questions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [questions[i], questions[j]] = [questions[j], questions[i]];
+  }
+
+  // 選択肢シャッフル
+  questions.forEach(q => {
+    q._shuffledChoices = [...q.choices].sort(() => Math.random() - 0.5);
+  });
+
+  // ステートセット
+  state.grade = filtered[0].grade; // 最初の学年をデフォルトに
+  state.questions = questions;
+  state.current = 0;
+  state.correct = 0;
+  state.wrong = 0;
+  state.mistakes = [];
+  state.answered = false;
+
+  showScreen('quiz');
+  renderQuestion();
+}
+
+function updateMistakeBtn() {
+  const btn = $('#mistakeReviewBtn');
+  if (!btn) return;
+  const count = getMistakeHistory().length;
+  if (count > 0) {
+    btn.textContent = `📝 ミスした問題を復習 (${count}問)`;
+    btn.style.display = 'block';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+// ====== Unlock System UI ======
+function renderUnlockBadge() {
+  const badge = $('#unlockBadge');
+  if (!badge) return;
+  if (isUnlocked()) {
+    badge.innerHTML = '🔓 UNLIMITED';
+    badge.className = 'unlock-badge unlocked';
+  } else {
+    badge.innerHTML = '🔒 FREE';
+    badge.className = 'unlock-badge locked';
+  }
+}
+
+function showUnlockModal() {
+  if (isUnlocked()) {
+    // 既にアンロック済み → FREE版に戻すオプション付き
+    const overlay = document.createElement('div');
+    overlay.className = 'help-overlay';
+    overlay.id = 'unlockModal';
+    overlay.innerHTML = `
+      <div class="help-modal slide-up">
+        <div class="help-header">
+          <h2>🔓 UNLIMITED</h2>
+          <button class="help-close-x" onclick="closeUnlockModal()">×</button>
+        </div>
+        <div class="help-body" style="text-align:center;padding:1.5rem">
+          <div style="font-size:2.5rem;margin-bottom:0.5rem">🎉</div>
+          <p style="font-size:0.85rem;font-weight:700;color:var(--text-main)">全セクション解放済み！</p>
+          <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem">すべての問題にアクセスできます</p>
+          <div style="margin-top:1rem;border-top:1px solid rgba(100,120,150,0.1);padding-top:0.8rem">
+            <p style="font-size:0.7rem;color:var(--text-dim)">FREE版に戻す場合はパスワードを入力</p>
+            <div class="unlock-input-wrap" style="margin-top:0.4rem">
+              <input type="password" id="relockInput" class="unlock-input" placeholder="パスワード" autocomplete="off" style="font-size:0.85rem">
+            </div>
+            <button class="mr-clear-btn" style="margin-top:0.4rem" onclick="attemptRelock()">🔒 FREE版に戻す</button>
+          </div>
+        </div>
+        <button class="help-close-btn" onclick="closeUnlockModal()">閉じる</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('show'));
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'help-overlay';
+  overlay.id = 'unlockModal';
+  overlay.innerHTML = `
+    <div class="help-modal slide-up">
+      <div class="help-header">
+        <h2>🔐 全セクション解放</h2>
+        <button class="help-close-x" onclick="closeUnlockModal()">×</button>
+      </div>
+      <div class="help-body">
+        <div style="text-align:center;padding:0.5rem 0">
+          <div style="font-size:2rem;margin-bottom:0.5rem">🔒</div>
+          <p style="font-size:0.82rem;color:var(--text-main);font-weight:600">現在 FREE版：Program 1 のみ利用可能</p>
+          <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem">パスワードを入力して全セクションを解放しましょう</p>
+        </div>
+        <div class="unlock-input-wrap">
+          <input type="password" id="unlockInput" class="unlock-input" placeholder="パスワードを入力" autocomplete="off">
+          <div class="unlock-error" id="unlockError" style="display:none">❌ パスワードが違います</div>
+        </div>
+      </div>
+      <button class="help-close-btn" style="background:var(--primary);" onclick="attemptUnlock()">🔓 解放する</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  // Enter キーでも解放
+  setTimeout(() => {
+    const input = $('#unlockInput');
+    if (input) {
+      input.focus();
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') attemptUnlock();
+      });
+    }
+  }, 400);
+}
+
+function attemptUnlock() {
+  const input = $('#unlockInput');
+  const error = $('#unlockError');
+  if (!input) return;
+
+  if (input.value === UNLOCK_PASSWORD) {
+    setUnlocked(true);
+    closeUnlockModal();
+    renderUnlockBadge();
+    renderSectionChips();
+    updateSummary();
+    showWelcomeUnlock();
+  } else {
+    if (error) {
+      error.style.display = 'block';
+      input.classList.add('shake');
+      setTimeout(() => input.classList.remove('shake'), 400);
+    }
+  }
+}
+
+function closeUnlockModal() {
+  const modal = $('#unlockModal');
+  if (modal) {
+    modal.classList.remove('show');
+    setTimeout(() => modal.remove(), 300);
+  }
+}
+
+function attemptRelock() {
+  const input = $('#relockInput');
+  if (!input) return;
+  if (input.value === UNLOCK_PASSWORD) {
+    setUnlocked(false);
+    state.selectedSections = ['1']; // Program 1のみに戻す
+    closeUnlockModal();
+    renderUnlockBadge();
+    renderSectionChips();
+    updateSummary();
+  } else {
+    input.classList.add('shake');
+    setTimeout(() => input.classList.remove('shake'), 400);
+  }
+}
+
+function showWelcomeUnlock() {
+  // クラッカーパーティクル生成
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  container.id = 'confettiContainer';
+  
+  const colors = ['#FF6B6B','#4ECDC4','#45B7D1','#F9CA24','#6C5CE7','#FD79A8','#00B894','#E17055'];
+  for (let i = 0; i < 60; i++) {
+    const particle = document.createElement('div');
+    particle.className = 'confetti-particle';
+    particle.style.left = Math.random() * 100 + '%';
+    particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    particle.style.animationDelay = Math.random() * 0.5 + 's';
+    particle.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+    const size = 6 + Math.random() * 6;
+    particle.style.width = size + 'px';
+    particle.style.height = size + 'px';
+    if (Math.random() > 0.5) particle.style.borderRadius = '50%';
+    container.appendChild(particle);
+  }
+  document.body.appendChild(container);
+
+  // Welcome モーダル
+  const overlay = document.createElement('div');
+  overlay.className = 'help-overlay';
+  overlay.id = 'welcomeUnlockModal';
+  overlay.innerHTML = `
+    <div class="help-modal slide-up" style="text-align:center">
+      <div class="help-body" style="padding:2rem 1.5rem">
+        <div style="font-size:3rem;margin-bottom:0.5rem">🎊🎉🎊</div>
+        <h2 style="font-size:1.2rem;font-weight:800;color:var(--text-main);margin-bottom:0.5rem">Welcome to UNLIMITED!</h2>
+        <p style="font-size:0.85rem;color:var(--success);font-weight:700;margin-bottom:0.3rem">✅ 全セクション解放完了！</p>
+        <p style="font-size:0.78rem;color:var(--text-muted);line-height:1.5">
+          すべての学年・全セクションの問題に<br>
+          アクセスできるようになりました！<br>
+          たくさん練習して英語力を伸ばそう 💪
+        </p>
+        <div style="margin-top:1rem;padding:0.6rem;background:rgba(92,107,192,0.06);border-radius:var(--radius-md)">
+          <span style="font-size:1.5rem">🔓</span>
+          <div style="font-size:0.7rem;color:var(--primary);font-weight:700;margin-top:0.2rem">UNLIMITED EDITION</div>
+        </div>
+      </div>
+      <button class="help-close-btn" onclick="closeWelcomeUnlock()">始めよう！ 🚀</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  // 3秒後に紙吹雪を消す
+  setTimeout(() => {
+    const c = $('#confettiContainer');
+    if (c) c.remove();
+  }, 4000);
+}
+
+function closeWelcomeUnlock() {
+  const modal = $('#welcomeUnlockModal');
+  if (modal) {
+    modal.classList.remove('show');
+    setTimeout(() => modal.remove(), 300);
+  }
+}
+
 // ====== Screen Management ======
 function showScreen(name) {
   $('#setupScreen').style.display = name === 'setup' ? 'block' : 'none';
@@ -894,7 +1340,7 @@ async function init() {
   // Show loading
   $('#app').innerHTML = `
     <div class="header">
-      <h1>☀️ Sunshine 英単語クイズ</h1>
+      <h1>🏃 Vocabulary Marathon</h1>
       <p>データを読み込んでいます...</p>
     </div>
     <div class="loading">
@@ -909,9 +1355,12 @@ async function init() {
   $('#app').innerHTML = `
     <div class="setup-screen" id="setupScreen">
       <div class="header">
-        <h1>☀️ Sunshine 英単語クイズ</h1>
-        <p>開隆堂サンシャイン中学英語 · 4択空所補充</p>
-        <button class="help-btn" onclick="showHelp()">❓ 使い方</button>
+        <h1>🏃 Vocabulary Marathon</h1>
+        <p>中学英語 · 4択空所補充クイズ</p>
+        <div class="header-actions">
+          <button class="help-btn" onclick="showHelp()">❓ 使い方</button>
+          <button class="unlock-badge" id="unlockBadge" onclick="showUnlockModal()"></button>
+        </div>
       </div>
       <div class="streak-badge" id="streakBadge"></div>
       <div class="setup-card">
@@ -970,6 +1419,7 @@ async function init() {
           <div class="stat">🎯 出題: <strong id="pickCount">0</strong>問</div>
         </div>
         <button class="start-btn" id="startBtn" disabled>🚀 クイズ開始</button>
+        <button class="mistake-review-home-btn" id="mistakeReviewBtn" onclick="showMistakeReviewModal()">📝 ミスした問題を復習</button>
       </div>
     </div>
     <div class="quiz-screen" id="quizScreen">

@@ -30268,40 +30268,6 @@
     "audioHash": "db682177ef67"
   },
   {
-    "id": "1-16-15",
-    "tier": 2,
-    "section": "16",
-    "page": "p.140",
-    "type": "word",
-    "sentence": "We visited (    ) in Australia.",
-    "sentence_ja": "私たちはオーストラリアのブルーマウンテンズを訪れました。",
-    "answer": "the Blue Mountains",
-    "answer_translation": "ブルーマウンテンズ(地名)",
-    "choices": [
-      {
-        "word": "the Blue Mountains",
-        "translation": "ブルーマウンテンズ(地名)",
-        "correct": true
-      },
-      {
-        "word": "take [go for] a walk",
-        "translation": "散歩をする",
-        "correct": false
-      },
-      {
-        "word": "track and field",
-        "translation": "陸上競技",
-        "correct": false
-      },
-      {
-        "word": "the Opera House",
-        "translation": "オペラハウス（オーストラリアの劇場名）",
-        "correct": false
-      }
-    ],
-    "audioHash": "d0de50a4c7eb"
-  },
-  {
     "id": "1-L6-16",
     "tier": 1,
     "section": "L6",

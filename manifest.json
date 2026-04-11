@@ -1,0 +1,17 @@
+{
+  "name": "Vocabulary Marathon",
+  "short_name": "VocabMarathon",
+  "description": "中学英語 4択空所補充クイズ",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f0f4ff",
+  "theme_color": "#5C6BC0",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
