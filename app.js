@@ -804,6 +804,83 @@ function goHome() {
   showScreen('setup');
 }
 
+// ====== Help Manual ======
+function showHelp() {
+  const overlay = document.createElement('div');
+  overlay.className = 'help-overlay';
+  overlay.id = 'helpModal';
+  overlay.innerHTML = `
+    <div class="help-modal slide-up">
+      <div class="help-header">
+        <h2>📖 使い方ガイド</h2>
+        <button class="help-close-x" onclick="closeHelp()">×</button>
+      </div>
+      <div class="help-body">
+        <div class="help-section">
+          <h3>🎯 クイズの始め方</h3>
+          <ol>
+            <li><strong>学年を選択</strong>：中学1年・2年・3年から選ぶ</li>
+            <li><strong>出題範囲を絞る</strong>（任意）：ProgramやLet's Readなどセクションをタップして選択</li>
+            <li><strong>ページ指定</strong>（任意）：教科書のページ番号で範囲を指定</li>
+            <li><strong>Tierフィルター</strong>：難易度で絞り込み</li>
+            <li><strong>クイズ開始</strong>をタップ！</li>
+          </ol>
+        </div>
+
+        <div class="help-section">
+          <h3>💡 Tier（難易度）について</h3>
+          <ul>
+            <li><span class="help-tier t1">Tier 1</span> 基本語彙（必須！）</li>
+            <li><span class="help-tier t2">Tier 2</span> 標準語彙（テスト頻出）</li>
+            <li><span class="help-tier t3">Tier 3</span> 発展語彙（チャレンジ）</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h3>❓ クイズ画面の操作</h3>
+          <ul>
+            <li><strong>4つの選択肢</strong>から正しい答えを選ぶ</li>
+            <li><strong>💡 ヒントボタン</strong>をタップすると：
+              <br>① 例文の日本語訳が表示
+              <br>② 選択肢の日本語訳が表示</li>
+            <li><strong>🔊 スピーカー</strong>：解答後に例文の音声を再生</li>
+            <li><strong>🏠</strong>：ホームに戻る</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h3>📊 結果画面</h3>
+          <ul>
+            <li><strong>🔄 もう一度</strong>：同じ設定で再チャレンジ</li>
+            <li><strong>📝 間違えた問題だけ</strong>：ミスした問題だけで復習</li>
+            <li><strong>🏠 ホームへ</strong>：設定画面に戻る</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h3>🔥 連続トレーニング</h3>
+          <p>毎日クイズを完了すると連続日数がカウントされます。</p>
+          <ul>
+            <li><strong>20日・40日・60日...</strong> 達成でお祝い画面が出ます！</li>
+            <li>📸 スクリーンショットを保存して先生に見せると<strong>プレゼント</strong>がもらえます！</li>
+          </ul>
+        </div>
+      </div>
+      <button class="help-close-btn" onclick="closeHelp()">閉じる</button>
+    </div>`;
+  
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+}
+
+function closeHelp() {
+  const modal = $('#helpModal');
+  if (modal) {
+    modal.classList.remove('show');
+    setTimeout(() => modal.remove(), 300);
+  }
+}
+
 // ====== Screen Management ======
 function showScreen(name) {
   $('#setupScreen').style.display = name === 'setup' ? 'block' : 'none';
@@ -834,6 +911,7 @@ async function init() {
       <div class="header">
         <h1>☀️ Sunshine 英単語クイズ</h1>
         <p>開隆堂サンシャイン中学英語 · 4択空所補充</p>
+        <button class="help-btn" onclick="showHelp()">❓ 使い方</button>
       </div>
       <div class="streak-badge" id="streakBadge"></div>
       <div class="setup-card">
