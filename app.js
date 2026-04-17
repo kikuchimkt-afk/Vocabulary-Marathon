@@ -13,6 +13,8 @@ const state = {
   selectedSections: [],  // [] = all, ['1','2'] = specific
   pageStart: null,    // number or null
   pageEnd: null,      // number or null
+  idStart: null,      // number or null (ID番号の開始)
+  idEnd: null,        // number or null (ID番号の終了)
   questions: [],      // current quiz questions
   current: 0,
   correct: 0,
@@ -287,6 +289,14 @@ function extractPageNum(pageStr) {
   return m ? parseInt(m[1]) : null;
 }
 
+// ====== ID番号抽出 ======
+function extractIdNum(idStr) {
+  if (!idStr) return null;
+  // ID形式: "1-1-01" → 末尾の数字を抽出
+  const m = idStr.match(/(\d+)$/);
+  return m ? parseInt(m[1]) : null;
+}
+
 // ====== セクションソート（教科書ページ順）======
 function sortSectionsByPage(data) {
   // 各セクションの最小ページ番号を計算
@@ -337,9 +347,14 @@ function initSetup() {
       state.selectedSections = [];
       state.pageStart = null;
       state.pageEnd = null;
+      state.idStart = null;
+      state.idEnd = null;
       $('#pageStart').value = '';
       $('#pageEnd').value = '';
+      $('#idStart').value = '';
+      $('#idEnd').value = '';
       renderSectionChips();
+      updateIdRange();
       updateSummary();
     });
   });
@@ -382,12 +397,25 @@ function initSetup() {
     updateSummary();
   });
 
+  // ID range listeners
+  on($('#idStart'), 'input', () => {
+    const v = $('#idStart').value.trim();
+    state.idStart = v ? parseInt(v) : null;
+    updateSummary();
+  });
+  on($('#idEnd'), 'input', () => {
+    const v = $('#idEnd').value.trim();
+    state.idEnd = v ? parseInt(v) : null;
+    updateSummary();
+  });
+
   // Start button
   on($('#startBtn'), 'click', startQuiz);
   on($('#nextBtn'), 'click', nextQuestion);
 
   // ミス復習ボタン更新
   updateMistakeBtn();
+  updateIdRange();
 
   // アンロックバッジ更新
   renderUnlockBadge();
@@ -421,6 +449,7 @@ function renderSectionChips() {
       state.selectedSections = [];
       renderSectionChips();
       updatePageRange();
+      updateIdRange();
       updateSummary();
     });
   }
@@ -448,6 +477,7 @@ function renderSectionChips() {
         }
         renderSectionChips();
         updatePageRange();
+        updateIdRange();
         updateSummary();
       });
     }
@@ -480,6 +510,31 @@ function updatePageRange() {
   rangeInfo.textContent = `(範囲: p.${minP} 〜 p.${maxP})`;
 }
 
+function updateIdRange() {
+  // 選択セクションのID範囲を表示
+  const rangeInfo = $('#idRangeInfo');
+  if (!rangeInfo) return;
+
+  if (!state.grade) {
+    rangeInfo.textContent = '';
+    return;
+  }
+
+  let qs = state.quizData[state.grade] || [];
+  if (state.selectedSections.length > 0) {
+    qs = qs.filter(q => state.selectedSections.includes(q.section));
+  }
+
+  const idNums = qs.map(q => extractIdNum(q.id)).filter(n => n !== null);
+  if (idNums.length === 0) {
+    rangeInfo.textContent = '';
+    return;
+  }
+  const minId = Math.min(...idNums);
+  const maxId = Math.max(...idNums);
+  rangeInfo.textContent = `(範囲: ${minId} 〜 ${maxId})`;
+}
+
 function getFilteredQuestions() {
   if (!state.grade) return [];
   let qs = state.quizData[state.grade] || [];
@@ -506,6 +561,17 @@ function getFilteredQuestions() {
       if (pn === null) return false;
       if (state.pageStart !== null && pn < state.pageStart) return false;
       if (state.pageEnd !== null && pn > state.pageEnd) return false;
+      return true;
+    });
+  }
+
+  // ID range filter
+  if (state.idStart !== null || state.idEnd !== null) {
+    qs = qs.filter(q => {
+      const idNum = extractIdNum(q.id);
+      if (idNum === null) return false;
+      if (state.idStart !== null && idNum < state.idStart) return false;
+      if (state.idEnd !== null && idNum > state.idEnd) return false;
       return true;
     });
   }
@@ -1377,6 +1443,14 @@ async function init() {
             <input type="number" id="pageStart" placeholder="開始" min="1" max="200">
             <span class="page-range-sep">〜</span>
             <input type="number" id="pageEnd" placeholder="終了" min="1" max="200">
+          </div>
+        </div>
+        <div class="page-range" style="margin-top:0.5rem">
+          <label>🔢 単語ID指定 <span class="page-range-info" id="idRangeInfo"></span></label>
+          <div class="page-range-inputs">
+            <input type="number" id="idStart" placeholder="開始ID" min="1" max="999">
+            <span class="page-range-sep">〜</span>
+            <input type="number" id="idEnd" placeholder="終了ID" min="1" max="999">
           </div>
         </div>
 
