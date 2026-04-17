@@ -280,20 +280,18 @@ async function loadData() {
       state.quizData[key] = [];
     }
   }
+
+  // 各学年の問題に通し番号を付与（1始まり）
+  for (const key of ['g1', 'g2', 'g3']) {
+    const data = state.quizData[key] || [];
+    data.forEach((q, i) => { q._seqIdx = i + 1; });
+  }
 }
 
 // ====== ページ番号抽出 ======
 function extractPageNum(pageStr) {
   if (!pageStr) return null;
   const m = pageStr.match(/p\.(\d+)/);
-  return m ? parseInt(m[1]) : null;
-}
-
-// ====== ID番号抽出 ======
-function extractIdNum(idStr) {
-  if (!idStr) return null;
-  // ID形式: "1-1-01" → 末尾の数字を抽出
-  const m = idStr.match(/(\d+)$/);
   return m ? parseInt(m[1]) : null;
 }
 
@@ -525,7 +523,7 @@ function updateIdRange() {
     qs = qs.filter(q => state.selectedSections.includes(q.section));
   }
 
-  const idNums = qs.map(q => extractIdNum(q.id)).filter(n => n !== null);
+  const idNums = qs.map(q => q._seqIdx).filter(n => n != null);
   if (idNums.length === 0) {
     rangeInfo.textContent = '';
     return;
@@ -565,13 +563,13 @@ function getFilteredQuestions() {
     });
   }
 
-  // ID range filter
+  // ID range filter (通し番号 _seqIdx で絞り込み)
   if (state.idStart !== null || state.idEnd !== null) {
     qs = qs.filter(q => {
-      const idNum = extractIdNum(q.id);
-      if (idNum === null) return false;
-      if (state.idStart !== null && idNum < state.idStart) return false;
-      if (state.idEnd !== null && idNum > state.idEnd) return false;
+      const idx = q._seqIdx;
+      if (idx == null) return false;
+      if (state.idStart !== null && idx < state.idStart) return false;
+      if (state.idEnd !== null && idx > state.idEnd) return false;
       return true;
     });
   }
