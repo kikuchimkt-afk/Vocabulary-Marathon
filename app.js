@@ -32,7 +32,7 @@ const on = (el, ev, fn) => { if (el) el.addEventListener(ev, fn); };
 
 // ====== Unlock System ======
 const UNLOCK_KEY = 'sunshine_quiz_unlocked';
-const UNLOCK_PASSWORD = '55448833';
+const UNLOCK_PASSWORDS = ['55448833', 'bestone2026'];
 const FREE_SECTIONS = ['1']; // ロック時に使えるセクション
 
 function isUnlocked() {
@@ -45,6 +45,10 @@ function setUnlocked(val) {
 
 function isSectionFree(section) {
   return FREE_SECTIONS.includes(section);
+}
+
+function isValidUnlockPassword(value) {
+  return UNLOCK_PASSWORDS.includes(String(value || '').trim());
 }
 
 // ====== Streak (連続トレーニング) ======
@@ -1339,7 +1343,7 @@ function attemptUnlock() {
   const error = $('#unlockError');
   if (!input) return;
 
-  if (input.value === UNLOCK_PASSWORD) {
+  if (isValidUnlockPassword(input.value)) {
     setUnlocked(true);
     closeUnlockModal();
     renderUnlockBadge();
@@ -1366,7 +1370,7 @@ function closeUnlockModal() {
 function attemptRelock() {
   const input = $('#relockInput');
   if (!input) return;
-  if (input.value === UNLOCK_PASSWORD) {
+  if (isValidUnlockPassword(input.value)) {
     setUnlocked(false);
     state.selectedSections = ['1']; // Program 1のみに戻す
     closeUnlockModal();
