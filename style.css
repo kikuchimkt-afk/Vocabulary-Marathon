@@ -1146,6 +1146,39 @@ body::before {
   border-color: #e64a19;
 }
 
+.hint-btn.hint-stage3 {
+  border-color: rgba(92, 107, 192, 0.35);
+  background: rgba(92, 107, 192, 0.05);
+  color: var(--primary);
+}
+
+.hint-btn.hint-stage3:hover {
+  background: rgba(92, 107, 192, 0.1);
+  border-color: var(--primary);
+}
+
+.learning-hint {
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: rgba(92, 107, 192, 0.06);
+  border: 1px solid rgba(92, 107, 192, 0.14);
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.learning-hint .hint-label {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(92, 107, 192, 0.12);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 /* Score Header */
 .score-bar {
   display: flex;

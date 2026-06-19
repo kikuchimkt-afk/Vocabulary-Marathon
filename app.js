@@ -268,12 +268,14 @@ function closeCelebration() {
 }
 
 // ====== Data Loading ======
+const DATA_VERSION = '2026-06-20-hints-g3';
+
 async function loadData() {
   const files = ['g1_quiz.json', 'g2_quiz.json', 'g3_quiz.json'];
   for (const f of files) {
     const key = f.replace('_quiz.json', '');
     try {
-      const res = await fetch(f);
+      const res = await fetch(`${f}?v=${DATA_VERSION}`);
       state.quizData[key] = await res.json();
     } catch (e) {
       console.warn(`Failed to load ${f}:`, e);
@@ -661,10 +663,11 @@ function renderQuestion() {
   let cardHtml = `
     <div class="sentence-en">${sentenceHtml}</div>
     <div class="sentence-ja" id="sentenceJa" style="display:none">${q.sentence_ja}</div>
+    <div class="learning-hint" id="learningHint" style="display:none"></div>
   `;
 
   // Idiom hint
-  if (q.type === 'idiom' && q.idiom) {
+  if (q.type === 'idiom' && q.idiom && !hasLearningHints(q)) {
     const idiomDisplay = q.idiom.replace(q.answer, '(    )');
     cardHtml += `
       <div class="idiom-hint">
@@ -703,9 +706,33 @@ function renderQuestion() {
   $('#nextBtn').style.display = 'none';
 }
 
+function hasLearningHints(q) {
+  return !!(q && (q.hint_type || q.hint_form));
+}
+
 function updateHintButton() {
   const hintBtn = $('#hintBtn');
   if (!hintBtn) return;
+  const q = state.questions[state.current];
+
+  if (hasLearningHints(q)) {
+    if (state.hintStage === 0) {
+      hintBtn.textContent = '💡 ヒント①：語の種類';
+      hintBtn.style.display = 'block';
+      hintBtn.className = 'hint-btn';
+    } else if (state.hintStage === 1) {
+      hintBtn.textContent = '💡 ヒント②：英語の手がかり';
+      hintBtn.style.display = 'block';
+      hintBtn.className = 'hint-btn hint-stage2';
+    } else if (state.hintStage === 2) {
+      hintBtn.textContent = '💡 ヒント③：例文の日本語訳';
+      hintBtn.style.display = 'block';
+      hintBtn.className = 'hint-btn hint-stage3';
+    } else {
+      hintBtn.style.display = 'none';
+    }
+    return;
+  }
 
   if (state.hintStage === 0) {
     hintBtn.textContent = '💡 ヒント①：例文の日本語訳';
@@ -724,6 +751,29 @@ function showHint() {
   if (state.answered) return;
 
   state.hintStage++;
+  const q = state.questions[state.current];
+
+  if (hasLearningHints(q)) {
+    const hint = $('#learningHint');
+    if (state.hintStage === 1 && hint) {
+      hint.innerHTML = `<span class="hint-label">語の種類：</span>${q.hint_type || '英語の手がかりを考えましょう。'}`;
+      hint.style.display = 'block';
+      hint.classList.add('fade-in');
+    } else if (state.hintStage === 2 && hint) {
+      hint.innerHTML = `<span class="hint-label">英語の手がかり：</span>${q.hint_form || '文の形と空欄の位置を確認しましょう。'}`;
+      hint.style.display = 'block';
+      hint.classList.add('fade-in');
+    } else if (state.hintStage >= 3) {
+      const ja = $('#sentenceJa');
+      if (ja) {
+        ja.style.display = 'block';
+        ja.classList.add('fade-in');
+      }
+    }
+
+    updateHintButton();
+    return;
+  }
 
   if (state.hintStage === 1) {
     // 第1段階: 例文の日本語訳を表示
